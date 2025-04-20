@@ -1,0 +1,12 @@
+# 忽略可执行文件
+*.exe
+
+# 忽略VS Code配置目录
+*.vscode
+*.vscode/*
+*.vscode/settings.json
+*.vscode/tasks.json
+*.vscode/launch.json
+
+# 其他已有规则...
+public/*.csv
