@@ -212,64 +212,68 @@ void saveModel(const Layer &inputToHidden, const Layer &hiddenToOutput, const st
     outFile.close();
     cout << "Model saved to " << filename << endl;
 }
+// 用于存放一条训练样本
+struct Sample
+{
+    vector<float> input;
+    int label;
+};
 
 int main()
 {
-    const int epochs = 400;
-    vector<uint8_t> pixels;
-    vector<float> pixelData;
+    // 1) 预先将所有图片读入内存
+    vector<Sample> dataset;
+    dataset.reserve(10 * 500);
+    for (int label = 0; label < 10; ++label)
+    {
+        for (int idx = 1; idx <= 500; ++idx)
+        {
+            string path = "../public/train_bmp/" + to_string(label) + "/" +
+                          to_string(label) + "_" + to_string(idx) + ".bmp";
+            vector<uint8_t> raw;
+            if (!readBMP(path, raw))
+                continue; // 读不到就跳过
 
+            Sample s;
+            s.label = label;
+            s.input.resize(input_size);
+            // 假设 raw.size() == input_size
+            for (int i = 0; i < input_size; ++i)
+                s.input[i] = raw[i] / 255.0f;
+            dataset.push_back(move(s));
+        }
+    }
+    cout << "Loaded " << dataset.size() << " samples into memory\n";
+
+    // 2) 初始化网络
     random_device rd;
     mt19937 gen(rd());
     uniform_real_distribution<float> dis(-1.0f, 1.0f);
-
-    Layer inputToHidden;
+    Layer inputToHidden, hiddenToOutput;
     inputToHidden.weights.resize(input_size * hidden_size);
     for (auto &w : inputToHidden.weights)
-    {
         w = dis(gen);
-    }
-    inputToHidden.biases.resize(hidden_size, 0.0f);
-
-    Layer hiddenToOutput;
+    inputToHidden.biases.assign(hidden_size, 0.0f);
     hiddenToOutput.weights.resize(hidden_size * output_size);
     for (auto &w : hiddenToOutput.weights)
-    {
         w = dis(gen);
-    }
-    hiddenToOutput.biases.resize(output_size, 0.0f);
+    hiddenToOutput.biases.assign(output_size, 0.0f);
 
-    for (int epoch = 0; epoch < epochs; epoch++)
+    // 3) 训练循环：只在内存中遍历 dataset，不再读文件
+    const int epochs = 500;
+    for (int epoch = 0; epoch < epochs; ++epoch)
     {
-        for (int i = 0; i < 10; i++)
+        for (auto &sample : dataset)
         {
-            for (int j = 1; j <= 500; j++)
-            {
-                string s = to_string(j);
-                string path = "../public/train_bmp/" + to_string(i) + "/" +
-                              to_string(i) + "_" + s + ".bmp";
-
-                pixels.clear();
-                pixelData.clear();
-                if (!readBMP(path, pixels))
-                {
-                    continue;
-                }
-                for (auto pixel : pixels)
-                {
-                    pixelData.push_back((float)pixel / 255.0f);
-                }
-
-                vector<float> target = getTarget(i);
-                ForwardResult forward_result = forwardPropagation(pixelData, inputToHidden, hiddenToOutput);
-                backwardPropagation(pixelData, forward_result, target, inputToHidden, hiddenToOutput);
-            }
+            auto fr = forwardPropagation(sample.input, inputToHidden, hiddenToOutput);
+            auto target = getTarget(sample.label);
+            backwardPropagation(sample.input, fr, target,
+                                inputToHidden, hiddenToOutput);
         }
-        cout << "Epoch " << epoch + 1 << " completed" << endl;
+        cout << "Epoch " << (epoch + 1) << " completed\n";
     }
 
-    // 保存模型
+    // 4) 保存模型
     saveModel(inputToHidden, hiddenToOutput, "model.bin");
-
     return 0;
 }
